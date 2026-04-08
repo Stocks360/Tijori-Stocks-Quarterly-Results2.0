@@ -152,7 +152,6 @@ def save_known(keys):
 
 def send_telegram(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[WARN] Telegram credentials missing.")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -163,9 +162,9 @@ def send_telegram(text):
     }
     try:
         requests.post(url, data=payload, timeout=20).raise_for_status()
-        print("[INFO] Telegram message sent.")
+        print("[INFO] Message sent.")
     except Exception as e:
-        print(f"[ERROR] Telegram failed: {e}")
+        print(f"[ERROR] Telegram: {e}")
 
 
 def send_in_batches(lines, header):
@@ -228,19 +227,16 @@ def notify():
         line = f"🏢 <b>{item['company']}</b>\n{sym_line}\n🏭 {item.get('industry', 'N/A')}\n"
         line += f"📅 {item['date']}   |   M Cap: {item['mcap']}   |   PE: {item['pe']}\n\n"
 
-        # YOUR DESIRED FORMAT: YoY  QoQ  Mar 2026  Dec 2025  Mar 2025
-        line += "```diff\n"
-        line += "Metric            YoY       QoQ     Mar 2026   Dec 2025   Mar 2025\n"
-        line += "-----------------------------------------------------------------\n"
+        # Desired Format: YoY  QoQ  Mar 2026  Dec 2025  Mar 2025
+        line += "<b>Metric</b>          YoY       QoQ     Mar 2026   Dec 2025   Mar 2025\n"
+        line += "───────────────────────────────────────────────────────────────\n"
 
         for metric in ["Sales", "Operating Profit", "Net Profit"]:
             if metric in item["financials"]:
                 d = item["financials"][metric]
                 line += f"{metric:<16} {d.get('yoy','N/A'):>8}  {d.get('qoq','N/A'):>8}   {d.get('mar2026','N/A'):>8}   {d.get('dec2025','N/A'):>8}   {d.get('mar2025','N/A'):>8}\n"
 
-        line += "```\n"
-        line += f'🔗 <a href="{item["detail_link"]}">View Detailed Financials →</a>'
-
+        line += f'\n🔗 <a href="{item["detail_link"]}">View Detailed Financials →</a>'
         lines.append(line)
 
     send_in_batches(lines, header)
