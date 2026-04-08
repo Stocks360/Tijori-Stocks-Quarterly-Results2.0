@@ -234,7 +234,7 @@ def notify():
         for metric in ["Sales", "Operating Profit", "Net Profit"]:
             if metric in item["financials"]:
                 d = item["financials"][metric]
-                line += f"{metric:<15} {d.get('yoy','N/A'):>7}  {d.get('qoq','N/A'):>7}   {d.get('mar2026','N/A'):>6}   {d.get('dec2025','N/A'):>6}   {d.get('mar2025','N/A'):>6}\n"
+                line += f"{metric:<13} {d.get('yoy','N/A'):>6}  {d.get('qoq','N/A'):>6}   {d.get('mar2026','N/A'):>5}   {d.get('dec2025','N/A'):>5}   {d.get('mar2025','N/A'):>5}\n"
 
         line += f'\n🔗 <a href="{item["detail_link"]}">View Detailed Financials →</a>'
         lines.append(line)
