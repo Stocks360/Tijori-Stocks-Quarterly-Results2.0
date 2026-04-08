@@ -227,14 +227,14 @@ def notify():
         line = f"🏢 <b>{item['company']}</b>\n{sym_line}\n🏭 {item.get('industry', 'N/A')}\n"
         line += f"📅 {item['date']}   |   M Cap: {item['mcap']}   |   PE: {item['pe']}\n\n"
 
-        # Compact Table - One row per metric
-        line += "Metric            YoY       QoQ     Mar 2026   Dec 2025   Mar 2025\n"
-        line += "───────────────────────────────────────────────────────────────\n"
+        # Most Compact Table - One line per metric
+        line += "Metric           YoY      QoQ    Mar26   Dec25   Mar25\n"
+        line += "──────────────────────────────────────────────────────\n"
 
         for metric in ["Sales", "Operating Profit", "Net Profit"]:
             if metric in item["financials"]:
                 d = item["financials"][metric]
-                line += f"{metric:<16} {d.get('yoy','N/A'):>8}  {d.get('qoq','N/A'):>8}   {d.get('mar2026','N/A'):>8}   {d.get('dec2025','N/A'):>8}   {d.get('mar2025','N/A'):>8}\n"
+                line += f"{metric:<15} {d.get('yoy','N/A'):>7}  {d.get('qoq','N/A'):>7}   {d.get('mar2026','N/A'):>6}   {d.get('dec2025','N/A'):>6}   {d.get('mar2025','N/A'):>6}\n"
 
         line += f'\n🔗 <a href="{item["detail_link"]}">View Detailed Financials →</a>'
         lines.append(line)
