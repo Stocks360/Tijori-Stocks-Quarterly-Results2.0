@@ -227,8 +227,8 @@ def notify():
         line = f"🏢 <b>{item['company']}</b>\n{sym_line}\n🏭 {item.get('industry', 'N/A')}\n"
         line += f"📅 {item['date']}   |   M Cap: {item['mcap']}   |   PE: {item['pe']}\n\n"
 
-        # Desired Format: YoY  QoQ  Mar 2026  Dec 2025  Mar 2025
-        line += "<b>Metric</b>          YoY       QoQ     Mar 2026   Dec 2025   Mar 2025\n"
+        # Compact Table - One row per metric
+        line += "Metric            YoY       QoQ     Mar 2026   Dec 2025   Mar 2025\n"
         line += "───────────────────────────────────────────────────────────────\n"
 
         for metric in ["Sales", "Operating Profit", "Net Profit"]:
