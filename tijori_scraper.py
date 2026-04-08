@@ -164,7 +164,7 @@ def notify():
         line += f"📅 {item['date']}   |   M Cap: {item['mcap']}   |   PE: {item['pe']}\n\n"
 
         line += "```diff\n"
-        line += "Metric              Mar 2026     Dec 2025     Mar 2025     YoY       QoQ\n"
+        line += "Metric   YoY  QoQ   Mar 2026  Dec 2025  Mar 2025\n"
         line += "-------------------------------------------------------------------\n"
 
         for metric in ["Sales", "Operating Profit", "Net Profit"]:
