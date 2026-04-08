@@ -17,17 +17,21 @@ TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
 WATCHLIST_RAW      = os.environ.get("WATCHLIST", "ALL")
 
 
+# ── Load Stock Master ────────────────────────────────────────────────────────
 def load_stock_master():
     master = {}
     if not STOCKS_CSV.exists():
         print("[WARN] indianStocks.csv not found.")
         return master
+
     with STOCKS_CSV.open(encoding="utf-8", errors="ignore") as f:
         reader = csv.reader(f)
         for row in reader:
-            if len(row) < 3: continue
+            if len(row) < 3:
+                continue
             name = row[0].strip()
-            if not name or name.lower() == "name": continue
+            if not name or name.lower() == "name":
+                continue
             master[name.lower()] = {
                 "name": name,
                 "bse": row[1].strip() if len(row) > 1 else "",
@@ -42,9 +46,11 @@ def find_stock_info(company_name, master):
     query = company_name.lower().strip()
     if query in master:
         return master[query]
+
     matches = difflib.get_close_matches(query, list(master.keys()), n=1, cutoff=FUZZY_THRESHOLD)
     if matches:
         return master[matches[0]]
+
     clean = query.rstrip(". ")
     for k, v in master.items():
         if clean in k or k in clean or (len(clean) >= 8 and k.startswith(clean[:8])):
@@ -71,7 +77,7 @@ def is_in_watchlist(stock_info, company_name, watchlist):
     return False
 
 
-# ── Scrape with BeautifulSoup (Fast & Light) ─────────────────────────────────
+# ── Scrape Tijori Finance ─────────────────────────────────────────────────────
 def fetch_quarterly_results():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -88,16 +94,16 @@ def fetch_quarterly_results():
         try:
             company = item.find("h6").get_text(strip=True) if item.find("h6") else ""
 
-            link = item.find("a")
+            link = item.find("a", href=True)
             detail_link = "https://www.tijorifinance.com" + link["href"] if link and link.get("href") else ""
 
             date_tag = item.find("span", class_="event_date")
-            date_str = date_tag.get_text(strip=True) if date_tag else ""
+            date_str = date_tag.get_text(strip=True).replace("•", "").strip() if date_tag else ""
 
             # M Cap and PE
             values = item.find_all("span", class_="value")
-            mcap = values[0].get_text(strip=True) if len(values) > 0 else ""
-            pe = values[1].get_text(strip=True) if len(values) > 1 else ""
+            mcap = values[0].get_text(strip=True) if len(values) > 0 else "N/A"
+            pe = values[1].get_text(strip=True) if len(values) > 1 else "N/A"
 
             # Financial Table
             financials = {}
@@ -135,7 +141,7 @@ def fetch_quarterly_results():
         except Exception:
             continue
 
-    print(f"[INFO] Fetched {len(results)} quarterly results")
+    print(f"[INFO] Fetched {len(results)} quarterly results from Tijori")
     return results
 
 
@@ -160,13 +166,19 @@ def send_telegram(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("[WARN] Telegram credentials missing.")
         return
+
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
     try:
         requests.post(url, data=payload, timeout=20).raise_for_status()
-        print("[INFO] Message sent.")
+        print("[INFO] Telegram message sent.")
     except Exception as e:
-        print(f"[ERROR] Telegram: {e}")
+        print(f"[ERROR] Telegram failed: {e}")
 
 
 def send_in_batches(lines, header):
@@ -211,27 +223,39 @@ def notify():
 
     save_known(new_keys)
 
+    wl_note = " (All Stocks)" if not watchlist else f" (Watchlist: {', '.join(sorted(watchlist))})"
+
+    print(f"[{now}] New: {len(new_watch)} | Skipped old: {len(current) - len(new_watch)}{wl_note}")
+
     if not new_watch:
-        print("[INFO] No new results today.")
+        print("[INFO] No new quarterly results today.")
         return
 
-    header = f"📊 <b>New Quarterly Results</b>\n🕐 {now}\n📌 {len(new_watch)} new result(s)"
+    header = f"📊 <b>New Quarterly Results Published</b>{wl_note}\n🕐 {now}\n📌 {len(new_watch)} new result(s)"
 
     lines = []
     for item in new_watch:
-        sym = []
-        if item.get("nse"): sym.append(f'<code>NSE: {item["nse"]}</code>')
-        if item.get("bse"): sym.append(f'<code>BSE: {item["bse"]}</code>')
-        sym_line = " | ".join(sym) if sym else ""
+        sym_parts = []
+        if item.get("nse"):
+            sym_parts.append(f'<code>NSE: {item["nse"]}</code>')
+        if item.get("bse"):
+            sym_parts.append(f'<code>BSE: {item["bse"]}</code>')
+        sym_line = " | ".join(sym_parts) if sym_parts else "Symbol: N/A"
 
-        line = f"🏢 <b>{item['company']}</b>\n{sym_line}\n🏭 {item.get('industry', '')}\n📅 {item['date']} | M Cap: {item['mcap']} | PE: {item['pe']}\n\n"
+        line = (
+            f"🏢 <b>{item['company']}</b>\n"
+            f"{sym_line}\n"
+            f"🏭 {item.get('industry', 'N/A')}\n"
+            f"📅 {item['date']}  |  M Cap: {item['mcap']}  |  PE: {item['pe']}\n\n"
+        )
 
         for metric in ["Sales", "Operating Profit", "Net Profit"]:
             if metric in item["financials"]:
                 d = item["financials"][metric]
                 line += f"<b>{metric}</b>\n"
-                line += f"   Mar 2026: ₹{d['mar2026']} Cr\n"
-                line += f"   YoY: {d['yoy']}   QoQ: {d['qoq']}\n\n"
+                line += f"   Mar 2026 : ₹{d.get('mar2026', 'N/A')} Cr\n"
+                line += f"   YoY      : {d.get('yoy', 'N/A')}\n"
+                line += f"   QoQ      : {d.get('qoq', 'N/A')}\n\n"
 
         line += f'🔗 <a href="{item["detail_link"]}">View Detailed Financials →</a>'
         lines.append(line)
