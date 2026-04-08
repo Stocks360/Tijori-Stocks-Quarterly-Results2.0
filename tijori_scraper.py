@@ -72,7 +72,6 @@ def is_in_watchlist(stock_info, company_name, watchlist):
     return False
 
 
-# ── Scrape ────────────────────────────────────────────────────────────────────
 def fetch_quarterly_results():
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     r = requests.get(BASE_URL, headers=headers, timeout=30)
@@ -110,11 +109,8 @@ def fetch_quarterly_results():
                     mar25 = cols[5].get_text(strip=True) if len(cols) > 5 else ""
 
                     financials[metric] = {
-                        "yoy": yoy,
-                        "qoq": qoq,
-                        "mar2026": mar26,
-                        "dec2025": dec25,
-                        "mar2025": mar25
+                        "yoy": yoy, "qoq": qoq,
+                        "mar2026": mar26, "dec2025": dec25, "mar2025": mar25
                     }
 
             if company and date_str:
@@ -133,87 +129,29 @@ def fetch_quarterly_results():
     return results
 
 
-def make_key(item):
-    return f"{item['company']}|{item['date']}"
-
-
-def load_known():
-    if not DATA_FILE.exists():
-        return set()
-    with DATA_FILE.open(encoding="utf-8") as f:
-        return set(json.load(f))
-
-
-def save_known(keys):
-    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with DATA_FILE.open("w", encoding="utf-8") as f:
-        json.dump(sorted(list(keys)), f, indent=2)
-
-
-def send_telegram(text):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": text,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True,
-    }
-    try:
-        requests.post(url, data=payload, timeout=20).raise_for_status()
-    except: pass
-
-
-def send_in_batches(lines, header):
-    sep = "\n\n─────────────────\n\n"
-    batch = header
-    for line in lines:
-        candidate = batch + (sep if batch != header else "\n\n") + line
-        if len(candidate) > 3900:
-            send_telegram(batch)
-            batch = header + "\n\n" + line
-        else:
-            batch = candidate
-    if batch:
-        send_telegram(batch)
-
-
-# ── Main ──────────────────────────────────────────────────────────────────────
 def notify():
     now = datetime.now().strftime("%d %b %Y %I:%M %p IST")
     master = load_stock_master()
     watchlist = build_watchlist()
     current = fetch_quarterly_results()
-    known = load_known()
 
+    # Force send all results for testing (ignore known file)
     new_watch = []
-    new_keys = set(known)
-
     for item in current:
-        k = make_key(item)
-        if k in known:
-            continue
-
         info = find_stock_info(item["company"], master)
         item["nse"] = info.get("nse", "")
         item["bse"] = info.get("bse", "")
         item["industry"] = info.get("industry", "")
-
         if is_in_watchlist(info, item["company"], watchlist):
             new_watch.append(item)
 
-        new_keys.add(k)
-
-    save_known(new_keys)
-
-    wl_note = " (All Stocks)" if not watchlist else f" (Watchlist: {', '.join(sorted(watchlist))})"
+    print(f"[{now}] Forcing send of {len(new_watch)} results for testing")
 
     if not new_watch:
-        print("[INFO] No new results today.")
+        print("[INFO] No results found.")
         return
 
-    header = f"📊 <b>New Quarterly Results Published</b>{wl_note}\n🕐 {now}\n📌 {len(new_watch)} new result(s)"
+    header = f"📊 <b>New Quarterly Results Published</b> (Test Mode)\n🕐 {now}\n📌 {len(new_watch)} result(s)"
 
     lines = []
     for item in new_watch:
@@ -225,22 +163,40 @@ def notify():
         line = f"🏢 <b>{item['company']}</b>\n{sym_line}\n🏭 {item.get('industry', 'N/A')}\n"
         line += f"📅 {item['date']}   |   M Cap: {item['mcap']}   |   PE: {item['pe']}\n\n"
 
-        # Table Header
         line += "```diff\n"
-        line += "Metric              Mar 2026     Dec 2025     Mar 2025     YoY      QoQ\n"
+        line += "Metric              Mar 2026     Dec 2025     Mar 2025     YoY       QoQ\n"
         line += "-------------------------------------------------------------------\n"
 
         for metric in ["Sales", "Operating Profit", "Net Profit"]:
             if metric in item["financials"]:
                 d = item["financials"][metric]
-                line += f"{metric:<18} {d.get('mar2026','N/A'):>8}   {d.get('dec2025','N/A'):>8}   {d.get('mar2025','N/A'):>8}   {d.get('yoy','N/A'):>8}   {d.get('qoq','N/A'):>8}\n"
+                line += f"{metric:<18} {d.get('mar2026','N/A'):>8}   {d.get('dec2025','N/A'):>8}   {d.get('mar2025','N/A'):>8}   {d.get('yoy','N/A'):>9}   {d.get('qoq','N/A'):>8}\n"
 
         line += "```\n"
         line += f'🔗 <a href="{item["detail_link"]}">View Detailed Financials →</a>'
 
         lines.append(line)
 
+    send_in_batches = lambda lines, header: [send_telegram(header + "\n\n" + line) for line in lines]  # simple send for test
     send_in_batches(lines, header)
+
+
+def send_telegram(text):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("[WARN] Telegram credentials missing.")
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+    try:
+        requests.post(url, data=payload, timeout=20).raise_for_status()
+        print("[INFO] Telegram message sent.")
+    except Exception as e:
+        print(f"[ERROR] Telegram failed: {e}")
 
 
 if __name__ == "__main__":
