@@ -126,7 +126,8 @@ def fetch_quarterly_results():
                     "financials": financials,
                     "detail_link": detail_link
                 })
-        except:
+        except Exception as e:
+            print(f"Error parsing item: {e}")
             continue
 
     print(f"[INFO] Fetched {len(results)} results")
@@ -152,6 +153,7 @@ def save_known(keys):
 
 def send_telegram(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("[WARN] Telegram credentials missing.")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -228,10 +230,11 @@ def notify():
         line += f"📅 {item['date']}   |   M Cap: {item['mcap']}   |   PE: {item['pe']}\n\n"
 
         # ─────────────────────────────────────────────────────────────
-        # FIX: Build a monospaced table using <pre> tags
+        # Build a monospaced table using triple backticks (fixed font)
+        # Each column has a fixed width for perfect alignment
         # ─────────────────────────────────────────────────────────────
         table_lines = []
-        # Fixed column widths: Metric (20), YoY (10), QoQ (10), Mar26 (8), Dec25 (8), Mar25 (8)
+        # Header row with fixed widths: Metric(20), YoY(10), QoQ(10), Mar26(8), Dec25(8), Mar25(8)
         header_row = f"{'Metric':<20} {'YoY':>10} {'QoQ':>10} {'Mar26':>8} {'Dec25':>8} {'Mar25':>8}"
         separator = "-" * len(header_row)
         table_lines.append(header_row)
@@ -240,15 +243,17 @@ def notify():
         for metric in ["Sales", "Operating Profit", "Net Profit"]:
             if metric in item["financials"]:
                 d = item["financials"][metric]
-                yoy = d.get('yoy', '-')
-                qoq = d.get('qoq', '-')
-                mar26 = d.get('mar2026', '-')
-                dec25 = d.get('dec2025', '-')
-                mar25 = d.get('mar2025', '-')
+                # Clean up values (remove extra spaces, keep as is)
+                yoy = d.get('yoy', '-').strip()
+                qoq = d.get('qoq', '-').strip()
+                mar26 = d.get('mar2026', '-').strip()
+                dec25 = d.get('dec2025', '-').strip()
+                mar25 = d.get('mar2025', '-').strip()
                 row = f"{metric:<20} {yoy:>10} {qoq:>10} {mar26:>8} {dec25:>8} {mar25:>8}"
                 table_lines.append(row)
 
-        table_block = "<pre>\n" + "\n".join(table_lines) + "\n</pre>"
+        # Join with newlines and wrap in triple backticks
+        table_block = "```\n" + "\n".join(table_lines) + "\n```"
         line += table_block + f'\n\n🔗 <a href="{item["detail_link"]}">View Detailed Financials →</a>'
         lines.append(line)
 
