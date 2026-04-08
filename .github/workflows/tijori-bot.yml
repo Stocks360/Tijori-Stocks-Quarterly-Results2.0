@@ -2,9 +2,9 @@ name: Tijori Quarterly Results Bot
 
 on:
   schedule:
-    - cron: '30 2 * * *'     # Runs at 7:30 AM IST daily
-    - cron: '30 14 * * *'    # Runs at 7:30 PM IST daily
-  workflow_dispatch:         # Allows manual trigger
+    - cron: '30 2 * * *'     # 7:30 AM IST
+    - cron: '30 14 * * *'    # 7:30 PM IST
+  workflow_dispatch:         # Manual trigger
 
 jobs:
   run-bot:
@@ -20,8 +20,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install requests beautifulsoup4
+        run: pip install requests beautifulsoup4
 
       - name: Run Tijori Scraper
         env:
@@ -29,15 +28,3 @@ jobs:
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           WATCHLIST:          ${{ secrets.WATCHLIST }}
         run: python tijori_scraper.py
-
-      - name: Commit updated known results (if changed)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/tijori_known.json
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Update known quarterly results [skip ci]"
-            git push
-          fi
