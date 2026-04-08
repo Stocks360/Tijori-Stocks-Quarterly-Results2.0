@@ -18,28 +18,24 @@ TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
 WATCHLIST_RAW      = os.environ.get("WATCHLIST", "ALL")
 
 
-# ── Load Stock Master ────────────────────────────────────────────────────────
 def load_stock_master():
     master = {}
     if not STOCKS_CSV.exists():
         print("[WARN] indianStocks.csv not found.")
         return master
-
     with STOCKS_CSV.open(encoding="utf-8", errors="ignore") as f:
         reader = csv.reader(f)
         for row in reader:
-            if len(row) < 3:
-                continue
+            if len(row) < 3: continue
             name = row[0].strip()
-            if not name or name.lower() == "name":
-                continue
+            if not name or name.lower() == "name": continue
             master[name.lower()] = {
                 "name": name,
                 "bse": row[1].strip() if len(row) > 1 else "",
                 "nse": row[2].strip() if len(row) > 2 else "",
                 "industry": row[4].strip() if len(row) > 4 else "",
             }
-    print(f"[INFO] Loaded {len(master)} stocks from CSV")
+    print(f"[INFO] Loaded {len(master)} stocks")
     return master
 
 
@@ -47,11 +43,9 @@ def find_stock_info(company_name, master):
     query = company_name.lower().strip()
     if query in master:
         return master[query]
-
     matches = difflib.get_close_matches(query, list(master.keys()), n=1, cutoff=FUZZY_THRESHOLD)
     if matches:
         return master[matches[0]]
-
     clean = query.rstrip(". ")
     for k, v in master.items():
         if clean in k or k in clean or (len(clean) >= 8 and k.startswith(clean[:8])):
@@ -78,12 +72,9 @@ def is_in_watchlist(stock_info, company_name, watchlist):
     return False
 
 
-# ── Scrape Tijori Finance ─────────────────────────────────────────────────────
+# ── Scrape ────────────────────────────────────────────────────────────────────
 def fetch_quarterly_results():
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
-
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     r = requests.get(BASE_URL, headers=headers, timeout=30)
     r.raise_for_status()
 
@@ -94,27 +85,23 @@ def fetch_quarterly_results():
     for item in items:
         try:
             company = item.find("h6").get_text(strip=True) if item.find("h6") else ""
-
             link = item.find("a", href=True)
             detail_link = "https://www.tijorifinance.com" + link["href"] if link and link.get("href") else ""
 
             date_tag = item.find("span", class_="event_date")
             date_str = date_tag.get_text(strip=True).replace("•", "").strip() if date_tag else ""
 
-            # M Cap and PE
             values = item.find_all("span", class_="value")
             mcap = values[0].get_text(strip=True) if len(values) > 0 else "N/A"
             pe = values[1].get_text(strip=True) if len(values) > 1 else "N/A"
 
-            # Financial Table
             financials = {}
             table = item.find("table", class_="inner-table")
             if table:
-                rows = table.find_all("tr")[1:]  # skip header
+                rows = table.find_all("tr")[1:]
                 for row in rows:
                     cols = row.find_all("td")
-                    if len(cols) < 5:
-                        continue
+                    if len(cols) < 5: continue
                     metric = cols[0].get_text(strip=True)
                     yoy = cols[1].get_text(strip=True)
                     qoq = cols[2].get_text(strip=True)
@@ -139,10 +126,10 @@ def fetch_quarterly_results():
                     "financials": financials,
                     "detail_link": detail_link
                 })
-        except Exception:
+        except:
             continue
 
-    print(f"[INFO] Fetched {len(results)} quarterly results from Tijori")
+    print(f"[INFO] Fetched {len(results)} results")
     return results
 
 
@@ -165,9 +152,7 @@ def save_known(keys):
 
 def send_telegram(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[WARN] Telegram credentials missing.")
         return
-
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
@@ -177,9 +162,7 @@ def send_telegram(text):
     }
     try:
         requests.post(url, data=payload, timeout=20).raise_for_status()
-        print("[INFO] Telegram message sent.")
-    except Exception as e:
-        print(f"[ERROR] Telegram failed: {e}")
+    except: pass
 
 
 def send_in_batches(lines, header):
@@ -226,10 +209,8 @@ def notify():
 
     wl_note = " (All Stocks)" if not watchlist else f" (Watchlist: {', '.join(sorted(watchlist))})"
 
-    print(f"[{now}] New: {len(new_watch)} | Skipped old: {len(current) - len(new_watch)}{wl_note}")
-
     if not new_watch:
-        print("[INFO] No new quarterly results today.")
+        print("[INFO] No new results today.")
         return
 
     header = f"📊 <b>New Quarterly Results Published</b>{wl_note}\n🕐 {now}\n📌 {len(new_watch)} new result(s)"
@@ -237,28 +218,26 @@ def notify():
     lines = []
     for item in new_watch:
         sym_parts = []
-        if item.get("nse"):
-            sym_parts.append(f'<code>NSE: {item["nse"]}</code>')
-        if item.get("bse"):
-            sym_parts.append(f'<code>BSE: {item["bse"]}</code>')
-        sym_line = " | ".join(sym_parts) if sym_parts else "Symbol: N/A"
+        if item.get("nse"): sym_parts.append(f'<code>NSE: {item["nse"]}</code>')
+        if item.get("bse"): sym_parts.append(f'<code>BSE: {item["bse"]}</code>')
+        sym_line = " | ".join(sym_parts) if sym_parts else ""
 
-        line = (
-            f"🏢 <b>{item['company']}</b>\n"
-            f"{sym_line}\n"
-            f"🏭 {item.get('industry', 'N/A')}\n"
-            f"📅 {item['date']}  |  M Cap: {item['mcap']}  |  PE: {item['pe']}\n\n"
-        )
+        line = f"🏢 <b>{item['company']}</b>\n{sym_line}\n🏭 {item.get('industry', 'N/A')}\n"
+        line += f"📅 {item['date']}   |   M Cap: {item['mcap']}   |   PE: {item['pe']}\n\n"
+
+        # Table Header
+        line += "```diff\n"
+        line += "Metric              Mar 2026     Dec 2025     Mar 2025     YoY      QoQ\n"
+        line += "-------------------------------------------------------------------\n"
 
         for metric in ["Sales", "Operating Profit", "Net Profit"]:
             if metric in item["financials"]:
                 d = item["financials"][metric]
-                line += f"<b>{metric}</b>\n"
-                line += f"   Mar 2026 : ₹{d.get('mar2026', 'N/A')} Cr\n"
-                line += f"   YoY      : {d.get('yoy', 'N/A')}\n"
-                line += f"   QoQ      : {d.get('qoq', 'N/A')}\n\n"
+                line += f"{metric:<18} {d.get('mar2026','N/A'):>8}   {d.get('dec2025','N/A'):>8}   {d.get('mar2025','N/A'):>8}   {d.get('yoy','N/A'):>8}   {d.get('qoq','N/A'):>8}\n"
 
+        line += "```\n"
         line += f'🔗 <a href="{item["detail_link"]}">View Detailed Financials →</a>'
+
         lines.append(line)
 
     send_in_batches(lines, header)
