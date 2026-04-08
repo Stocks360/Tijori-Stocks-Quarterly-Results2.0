@@ -227,16 +227,29 @@ def notify():
         line = f"🏢 <b>{item['company']}</b>\n{sym_line}\n🏭 {item.get('industry', 'N/A')}\n"
         line += f"📅 {item['date']}   |   M Cap: {item['mcap']}   |   PE: {item['pe']}\n\n"
 
-        # Most Compact Table - One line per metric
-        line += "Metric           YoY      QoQ    Mar26   Dec25   Mar25\n"
-        line += "──────────────────────────────────────────────────────\n"
+        # ─────────────────────────────────────────────────────────────
+        # FIX: Build a monospaced table using <pre> tags
+        # ─────────────────────────────────────────────────────────────
+        table_lines = []
+        # Fixed column widths: Metric (20), YoY (10), QoQ (10), Mar26 (8), Dec25 (8), Mar25 (8)
+        header_row = f"{'Metric':<20} {'YoY':>10} {'QoQ':>10} {'Mar26':>8} {'Dec25':>8} {'Mar25':>8}"
+        separator = "-" * len(header_row)
+        table_lines.append(header_row)
+        table_lines.append(separator)
 
         for metric in ["Sales", "Operating Profit", "Net Profit"]:
             if metric in item["financials"]:
                 d = item["financials"][metric]
-                line += f"{metric:<13} {d.get('yoy','N/A'):>6}  {d.get('qoq','N/A'):>6}   {d.get('mar2026','N/A'):>5}   {d.get('dec2025','N/A'):>5}   {d.get('mar2025','N/A'):>5}\n"
+                yoy = d.get('yoy', '-')
+                qoq = d.get('qoq', '-')
+                mar26 = d.get('mar2026', '-')
+                dec25 = d.get('dec2025', '-')
+                mar25 = d.get('mar2025', '-')
+                row = f"{metric:<20} {yoy:>10} {qoq:>10} {mar26:>8} {dec25:>8} {mar25:>8}"
+                table_lines.append(row)
 
-        line += f'\n🔗 <a href="{item["detail_link"]}">View Detailed Financials →</a>'
+        table_block = "<pre>\n" + "\n".join(table_lines) + "\n</pre>"
+        line += table_block + f'\n\n🔗 <a href="{item["detail_link"]}">View Detailed Financials →</a>'
         lines.append(line)
 
     send_in_batches(lines, header)
