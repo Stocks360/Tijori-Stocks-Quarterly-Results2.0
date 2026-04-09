@@ -3,7 +3,6 @@ import json
 import os
 import csv
 import difflib
-import re
 from bs4 import BeautifulSoup
 from pathlib import Path
 from datetime import datetime
@@ -17,12 +16,6 @@ FUZZY_THRESHOLD    = 0.75
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
 WATCHLIST_RAW      = os.environ.get("WATCHLIST", "ALL")
-
-
-def escape_markdown_v2(text: str) -> str:
-    """Escape special characters for Telegram MarkdownV2."""
-    special_chars = r'_*[]()~`>#+-=|{}.!'
-    return re.sub(f'([{re.escape(special_chars)}])', r'\\\1', str(text))
 
 
 def load_stock_master():
@@ -157,15 +150,14 @@ def save_known(keys):
         json.dump(sorted(list(keys)), f, indent=2)
 
 
-def send_telegram_markdown(text: str):
-    """Send message with parse_mode='MarkdownV2'"""
+def send_telegram(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": text,
-        "parse_mode": "MarkdownV2",
+        "parse_mode": "Markdown",   # Legacy Markdown – simpler, no heavy escaping
         "disable_web_page_preview": True,
     }
     try:
@@ -176,18 +168,17 @@ def send_telegram_markdown(text: str):
 
 
 def send_in_batches(lines, header):
-    """Split long messages (Telegram limit 4096 chars)"""
     sep = "\n\n─────────────────\n\n"
     batch = header
     for line in lines:
         candidate = batch + (sep if batch != header else "\n\n") + line
-        if len(candidate) > 3900:  # safe margin
-            send_telegram_markdown(batch)
+        if len(candidate) > 3900:
+            send_telegram(batch)
             batch = header + "\n\n" + line
         else:
             batch = candidate
     if batch:
-        send_telegram_markdown(batch)
+        send_telegram(batch)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -224,33 +215,22 @@ def notify():
         print("[INFO] No new results today.")
         return
 
-    header = f"📊 *New Quarterly Results Published*{escape_markdown_v2(wl_note)}\n🕐 {escape_markdown_v2(now)}\n📌 {len(new_watch)} new result(s)"
+    header = f"📊 *New Quarterly Results Published*{wl_note}\n🕐 {now}\n📌 {len(new_watch)} new result(s)"
+
     lines = []
-
     for item in new_watch:
-        # Build the markdown parts
-        company_esc = escape_markdown_v2(item['company'])
         sym_parts = []
-        if item.get("nse"):
-            sym_parts.append(f"NSE: {escape_markdown_v2(item['nse'])}")
-        if item.get("bse"):
-            sym_parts.append(f"BSE: {escape_markdown_v2(item['bse'])}")
+        if item.get("nse"): sym_parts.append(f"NSE: {item['nse']}")
+        if item.get("bse"): sym_parts.append(f"BSE: {item['bse']}")
         sym_line = " | ".join(sym_parts) if sym_parts else ""
-        industry_esc = escape_markdown_v2(item.get('industry', 'N/A'))
-        date_esc = escape_markdown_v2(item['date'])
-        mcap_esc = escape_markdown_v2(item['mcap'])
-        pe_esc = escape_markdown_v2(item['pe'])
 
-        line = f"🏢 *{company_esc}*\n"
+        line = f"🏢 *{item['company']}*\n"
         if sym_line:
             line += f"`{sym_line}`\n"
-        line += f"🏭 {industry_esc}\n"
-        line += f"📅 {date_esc}   |   M Cap: {mcap_esc}   |   PE: {pe_esc}\n\n"
+        line += f"🏭 {item.get('industry', 'N/A')}\n"
+        line += f"📅 {item['date']}   |   M Cap: {item['mcap']}   |   PE: {item['pe']}\n\n"
 
-        # ─────────────────────────────────────────────────────────────
-        # Build a scrollable code block (triple backticks)
-        # This will allow horizontal scrolling on mobile
-        # ─────────────────────────────────────────────────────────────
+        # Build scrollable code block (triple backticks) – horizontal scrolling on mobile
         table_lines = []
         header_row = f"{'Metric':<20} {'YoY':>10} {'QoQ':>10} {'Mar26':>8} {'Dec25':>8} {'Mar25':>8}"
         separator = "-" * len(header_row)
@@ -268,11 +248,7 @@ def notify():
                 row = f"{metric:<20} {yoy:>10} {qoq:>10} {mar26:>8} {dec25:>8} {mar25:>8}"
                 table_lines.append(row)
 
-        # Join and wrap in triple backticks
         table_block = "```\n" + "\n".join(table_lines) + "\n```"
-
-        # Escape the whole block? No, code block content is not escaped.
-        # But we must ensure no triple backticks inside – safe because we control content.
         line += table_block + f"\n\n🔗 [View Detailed Financials →]({item['detail_link']})"
         lines.append(line)
 
